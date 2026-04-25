@@ -5,7 +5,7 @@ import (
 )
 
 func runServer() {
-	gohttp.RunServer()
+	gohttp.RunServer10()
 }
 
 func main() {

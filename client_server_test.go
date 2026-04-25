@@ -7,12 +7,12 @@ import (
 
 func TestRunClientDuration(t *testing.T) {
 	go func() {
-		RunServer()
+		RunServer11()
 	}()
 	time.Sleep(100 * time.Millisecond)
 
 	start := time.Now()
-	err := RunClient(100)
+	err := RunClient11(1000)
 	elapsed := time.Since(start)
 
 	t.Logf("elapsed=%s", elapsed)

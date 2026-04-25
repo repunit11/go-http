@@ -5,7 +5,7 @@ import (
 )
 
 func runClient() error {
-	return gohttp.RunClient(10)
+	return gohttp.RunClient10(10)
 }
 
 func main() {
