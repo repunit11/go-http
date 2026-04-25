@@ -2,6 +2,8 @@ package gohttp
 
 import (
 	"bufio"
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"net"
@@ -10,6 +12,11 @@ import (
 	"strings"
 	"time"
 )
+
+func isGZipAcceptable(request *http.Request) bool {
+	return strings.Index(
+		strings.Join(request.Header["Accept-Encoding"], ","), "gzip") != -1
+}
 
 func RunServer11() {
 	// localhost:8888でTCP接続を待ち受ける準備
@@ -45,14 +52,26 @@ func RunServer11() {
 					panic(err)
 				}
 				fmt.Println(string(dump))
-				content := "Hello World\n"
 				// Responseの書き込み
 				response := http.Response{
-					StatusCode:    200,
-					ProtoMajor:    1,
-					ProtoMinor:    0,
-					ContentLength: int64(len(content)),
-					Body:          io.NopCloser(strings.NewReader("Hello World\n")),
+					StatusCode: 200,
+					ProtoMajor: 1,
+					ProtoMinor: 1,
+					Header:     make(http.Header),
+				}
+				if isGZipAcceptable(request) {
+					content := "Hello World (gzipped)\n"
+					var buffer bytes.Buffer
+					writer := gzip.NewWriter(&buffer)
+					io.WriteString(writer, content)
+					writer.Close()
+					response.Body = io.NopCloser(&buffer)
+					response.ContentLength = int64(buffer.Len())
+					response.Header.Set("Content-Encoding", "gzip")
+				} else {
+					content := "Hello World\n"
+					response.Body = io.NopCloser(strings.NewReader(content))
+					response.ContentLength = int64(len(content))
 				}
 				response.Write(conn)
 			}

@@ -2,10 +2,13 @@ package gohttp
 
 import (
 	"bufio"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"os"
 )
 
 func RunClient11(count int) error {
@@ -28,6 +31,8 @@ func RunClient11(count int) error {
 		if err != nil {
 			return err
 		}
+		request.Header.Set("Accept-Encoding", "gzip")
+
 		err = request.Write(conn)
 		if err != nil {
 			return err
@@ -43,11 +48,24 @@ func RunClient11(count int) error {
 		}
 
 		// 結果の表示
-		dump, err := httputil.DumpResponse(response, true)
+		dump, err := httputil.DumpResponse(response, false)
 		if err != nil {
 			return err
 		}
 		fmt.Println(string(dump))
+
+		defer response.Body.Close()
+
+		if response.Header.Get("Content-Encoding") == "gzip" {
+			reader, err := gzip.NewReader(response.Body)
+			if err != nil {
+				return err
+			}
+			io.Copy(os.Stdout, reader)
+			reader.Close()
+		} else {
+			io.Copy(os.Stdout, response.Body)
+		}
 
 		current++
 	}
