@@ -1,4 +1,4 @@
-package main
+package gohttp
 
 import (
 	"bufio"
@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func main() {
+func RunServer() {
 	// localhost:8888でTCP接続を待ち受ける準備
 	listner, err := net.Listen("tcp", "localhost:8888")
 	if err != nil {

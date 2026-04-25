@@ -1,4 +1,4 @@
-package main
+package gohttp
 
 import (
 	"bufio"
@@ -6,25 +6,20 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"strconv"
 	"strings"
-	"time"
 )
 
-func main() {
-	sendMessages := []string{
-		"ASCII",
-		"PROGRAMING",
-		"PLUS",
-	}
+func RunClient(count int) error {
 	current := 0
 	var conn net.Conn
-	for {
+	for i := 0; i < count; i++ {
 		var err error
 		// コネクションを張る
 		if conn == nil {
 			conn, err = net.Dial("tcp", "localhost:8888")
 			if err != nil {
-				panic(err)
+				return err
 			}
 			fmt.Printf("Access: %d\n", current)
 		}
@@ -33,13 +28,13 @@ func main() {
 		request, err := http.NewRequest(
 			"POST",
 			"http://localhost:8888",
-			strings.NewReader(sendMessages[current]))
+			strings.NewReader(strconv.Itoa(i)))
 		if err != nil {
-			panic(err)
+			return err
 		}
 		err = request.Write(conn)
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		// レスポンスの受け取り
@@ -54,16 +49,15 @@ func main() {
 		// 結果の表示
 		dump, err := httputil.DumpResponse(response, true)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		fmt.Println(string(dump))
 
 		current++
-		if current == len(sendMessages) {
-			break
-		}
-
-		time.Sleep(6 * time.Second)
 	}
-	conn.Close()
+
+	if conn != nil {
+		return conn.Close()
+	}
+	return nil
 }
