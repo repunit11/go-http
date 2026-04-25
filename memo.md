@@ -1,4 +1,5 @@
 ## Server
+### 初期状態
 1. net.Listen
    TCP用のソケットを作る→localhost:8888に紐づける→接続待ち状態にする
 2. listner.Accept
@@ -15,6 +16,13 @@
    HTTPレスポンスをTCPに流せるバイト列に変換して、connに書き込む
 8. conn.Close
    TCPコネクションを閉じる
+
+### Keep-Alive対応
+1. forでリクエストの受付をループしている
+   TCPコネクションが張られた後に何度もリクエストを受け付ける
+2. conn.SetReadDeadlineでタイムアウトを設定しておく
+3. http.ReadRequestでリクエストを待つ
+   タイムアウトしたらerrにnet.Errorをラップした構造体が設定
 
 ## Client
 1. net.Dial
