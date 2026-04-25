@@ -6,29 +6,64 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"strings"
+	"time"
 )
 
 func main() {
-	// tcpコネクションを張る
-	conn, err := net.Dial("tcp", "localhost:8888")
-	if err != nil {
-		panic(err)
+	sendMessages := []string{
+		"ASCII",
+		"PROGRAMING",
+		"PLUS",
 	}
-	// リクエストを作る
-	request, err := http.NewRequest("GET", "http://localhost:8888", nil)
-	if err != nil {
-		panic(err)
+	current := 0
+	var conn net.Conn
+	for {
+		var err error
+		// コネクションを張る
+		if conn == nil {
+			conn, err = net.Dial("tcp", "localhost:8888")
+			if err != nil {
+				panic(err)
+			}
+			fmt.Printf("Access: %d\n", current)
+		}
+
+		// リクエストの作成、書き込み
+		request, err := http.NewRequest(
+			"POST",
+			"http://localhost:8888",
+			strings.NewReader(sendMessages[current]))
+		if err != nil {
+			panic(err)
+		}
+		err = request.Write(conn)
+		if err != nil {
+			panic(err)
+		}
+
+		// レスポンスの受け取り
+		response, err := http.ReadResponse(
+			bufio.NewReader(conn), request)
+		if err != nil {
+			fmt.Println("Retry")
+			conn = nil
+			continue
+		}
+
+		// 結果の表示
+		dump, err := httputil.DumpResponse(response, true)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(string(dump))
+
+		current++
+		if current == len(sendMessages) {
+			break
+		}
+
+		time.Sleep(6 * time.Second)
 	}
-	// リクエストをコネクションに書き込む
-	request.Write(conn)
-	// レスポンスを受け取る
-	response, err := http.ReadResponse(bufio.NewReader(conn), request)
-	if err != nil {
-		panic(err)
-	}
-	dump, err := httputil.DumpResponse(response, true)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(string(dump))
+	conn.Close()
 }

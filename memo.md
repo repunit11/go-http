@@ -25,6 +25,7 @@
    タイムアウトしたらerrにnet.Errorをラップした構造体が設定
 
 ## Client
+### 初期状態
 1. net.Dial
    localhost:8888で待ち受けているサーバーに対してTCP接続を開始する（SYNパケットを送る）
 2. http.NewRequest
@@ -37,3 +38,7 @@
    connから直接読むのではなくバッファ付きReaderで包んでいる。行単位、必要量単位で処理するため。
 6. httputil.DumpResponse
    responseをログ表示させやすいHTTPテキスト風の形に戻している
+
+### Keep-Alive対応
+1. コネクションが切れていたら再接続をするようにしている
+   コネクションをわざと切るようにsleepを追加
