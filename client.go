@@ -12,6 +12,52 @@ import (
 	"strconv"
 )
 
+func RunClient11Pipe(count int) error {
+	var conn net.Conn = nil
+	var err error
+	conn, err = net.Dial("tcp", "localhost:8888")
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Access\n")
+	defer conn.Close()
+
+	requests := make([]*http.Request, 0, count)
+	for i := 0; i < count; i++ {
+		lastMessage := i == count-1
+		request, err := http.NewRequest(
+			"GET", "http://localhost:8888?message="+strconv.Itoa(count), nil)
+		if lastMessage {
+			request.Header.Add("Connection", "close")
+		} else {
+			request.Header.Add("Connection", "keep-alive")
+		}
+		if err != nil {
+			return err
+		}
+		err = request.Write(conn)
+		if err != nil {
+			return err
+		}
+		fmt.Println("send: ", i)
+		requests = append(requests, request)
+	}
+
+	reader := bufio.NewReader(conn)
+	for _, request := range requests {
+		response, err := http.ReadResponse(reader, request)
+		if err != nil {
+			return err
+		}
+		dump, err := httputil.DumpResponse(response, true)
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(dump))
+	}
+	return nil
+}
+
 func RunClient11Chunk(count int) error {
 	current := 0
 	var conn net.Conn
