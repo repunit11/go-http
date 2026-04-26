@@ -9,7 +9,69 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"strconv"
 )
+
+func RunClient11Chunk(count int) error {
+	current := 0
+	var conn net.Conn
+	for i := 0; i < count; i++ {
+		var err error
+		// コネクションを張る
+		if conn == nil {
+			conn, err = net.Dial("tcp", "localhost:8888")
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Access: %d\n", current)
+		}
+		// リクエストの作成、書き込み
+		request, err := http.NewRequest("GET", "http://localhost:8888", nil)
+		if err != nil {
+			return err
+		}
+		err = request.Write(conn)
+		if err != nil {
+			return err
+		}
+
+		// レスポンスの受け取り
+		reader := bufio.NewReader(conn)
+		response, err := http.ReadResponse(reader, request)
+		if err != nil {
+			return err
+		}
+		dump, err := httputil.DumpResponse(response, false)
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(dump))
+
+		// チャンクごとに受け取り
+		if len(response.TransferEncoding) < 1 || response.TransferEncoding[0] != "chunked" {
+			return fmt.Errorf("wrong transfer encoding")
+		}
+		for {
+			sizeStr, err := reader.ReadBytes('\n')
+			if err == io.EOF {
+				break
+			}
+			size, err := strconv.ParseInt(string(sizeStr[:len(sizeStr)-2]), 16, 64)
+			if size == 0 {
+				break
+			}
+			if err != nil {
+				return err
+			}
+
+			line := make([]byte, int(size))
+			io.ReadFull(reader, line)
+			reader.Discard(2)
+			fmt.Printf("	%d bytes: %s\n", size, string(line))
+		}
+	}
+	return nil
+}
 
 func RunClient11(count int) error {
 	current := 0

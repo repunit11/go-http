@@ -5,7 +5,7 @@ import (
 )
 
 func runClient() error {
-	return gohttp.RunClient11(10)
+	return gohttp.RunClient11Chunk(10)
 }
 
 func main() {
