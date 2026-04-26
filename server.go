@@ -22,6 +22,66 @@ var contents = []string{
 	" そして、夜でも昼でも、あたりの村へ出てきて、いたずらばかりしました。",
 }
 
+// chan内の内容をconnに順番に書き出す
+func writeToConn(sessionResponses chan chan *http.Response, conn net.Conn) {
+	defer conn.Close()
+	for sessionResponse := range sessionResponses {
+		response := <-sessionResponse
+		response.Write(conn)
+		close(sessionResponse)
+	}
+}
+
+// セッション内のリクエストを処理する
+func handleRequest(request *http.Request, resultReceiver chan *http.Response) {
+	dump, err := httputil.DumpRequest(request, true)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(dump))
+	content := "Hello World\n"
+
+	response := &http.Response{
+		StatusCode:    200,
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		ContentLength: int64(len(content)),
+		Body:          io.NopCloser(strings.NewReader(content)),
+	}
+
+	// 処理が終わったらチャネルに書き込み
+	resultReceiver <- response
+}
+
+func processSessionPipe(conn net.Conn) {
+	fmt.Printf("Accept %v\n", conn.RemoteAddr())
+	// セッション内のリクエストを順に処理するチャネルの準備
+	sessionResponses := make(chan chan *http.Response, 50)
+	defer close(sessionResponses)
+	// レスポンスをソケットに書きだすgoroutine
+	go writeToConn(sessionResponses, conn)
+	reader := bufio.NewReader(conn)
+	for {
+		// リクエストを受け取る
+		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		request, err := http.ReadRequest(reader)
+		if err != nil {
+			neterr, ok := err.(net.Error)
+			if ok && neterr.Timeout() {
+				fmt.Println("Timeout")
+				break
+			} else if err == io.EOF {
+				break
+			}
+			panic(err)
+		}
+		// レスポンスを実行
+		sessionResponse := make(chan *http.Response)
+		sessionResponses <- sessionResponse
+		go handleRequest(request, sessionResponse)
+	}
+}
+
 func processSessionChank(conn net.Conn) {
 	fmt.Printf("Accept %v\n", conn.RemoteAddr())
 	defer conn.Close()
@@ -120,7 +180,7 @@ func RunServer11() {
 		if err != nil {
 			panic(err)
 		}
-		go processSessionChank(conn)
+		go processSessionPipe(conn)
 	}
 }
 
