@@ -7,7 +7,7 @@ import (
 
 func TestRunClientDuration(t *testing.T) {
 	go func() {
-		RunServer11()
+		RunHTTP11PipelineServer()
 	}()
 	time.Sleep(100 * time.Millisecond)
 

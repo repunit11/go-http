@@ -5,7 +5,7 @@ import (
 )
 
 func runServer() {
-	gohttp.RunServer11()
+	gohttp.RunHTTP11PipelineServer()
 }
 
 func main() {
