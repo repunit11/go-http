@@ -12,7 +12,7 @@ func TestRunClientDuration(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	start := time.Now()
-	err := RunClient11Pipe(1000)
+	err := RunHTTP11PipelineClient(1000)
 	elapsed := time.Since(start)
 
 	t.Logf("elapsed=%s", elapsed)

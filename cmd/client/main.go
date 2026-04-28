@@ -5,7 +5,7 @@ import (
 )
 
 func runClient() error {
-	return gohttp.RunClient11Pipe(10)
+	return gohttp.RunHTTP11PipelineClient(10)
 }
 
 func main() {

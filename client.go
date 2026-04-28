@@ -12,7 +12,25 @@ import (
 	"strconv"
 )
 
-func RunClient11Pipe(count int) error {
+type clienthandler func(*net.Conn, int) error
+
+func RunHTTP10BasicClient(count int) error {
+	return runClient(count, processBasic)
+}
+
+func RunHTTP11KeepAliveClient(count int) error {
+	return runClient(count, processKeepAlive)
+}
+
+func RunHTTP11GzipClient(count int) error {
+	return runClient(count, processGzip)
+}
+
+func RunHTTP11ChunkedClient(count int) error {
+	return runClient(count, processChunked)
+}
+
+func RunHTTP11PipelineClient(count int) error {
 	var conn net.Conn = nil
 	var err error
 	conn, err = net.Dial("tcp", "localhost:8888")
@@ -58,124 +76,14 @@ func RunClient11Pipe(count int) error {
 	return nil
 }
 
-func RunClient11Chunk(count int) error {
+func runClient(count int, handler clienthandler) error {
 	current := 0
 	var conn net.Conn
 	for i := 0; i < count; i++ {
-		var err error
-		// コネクションを張る
-		if conn == nil {
-			conn, err = net.Dial("tcp", "localhost:8888")
-			if err != nil {
-				return err
-			}
-			fmt.Printf("Access: %d\n", current)
-		}
-		// リクエストの作成、書き込み
-		request, err := http.NewRequest("GET", "http://localhost:8888", nil)
+		err := handler(&conn, current)
 		if err != nil {
 			return err
 		}
-		err = request.Write(conn)
-		if err != nil {
-			return err
-		}
-
-		// レスポンスの受け取り
-		reader := bufio.NewReader(conn)
-		response, err := http.ReadResponse(reader, request)
-		if err != nil {
-			return err
-		}
-		dump, err := httputil.DumpResponse(response, false)
-		if err != nil {
-			return err
-		}
-		fmt.Println(string(dump))
-
-		// チャンクごとに受け取り
-		if len(response.TransferEncoding) < 1 || response.TransferEncoding[0] != "chunked" {
-			return fmt.Errorf("wrong transfer encoding")
-		}
-		for {
-			sizeStr, err := reader.ReadBytes('\n')
-			if err == io.EOF {
-				break
-			}
-			size, err := strconv.ParseInt(string(sizeStr[:len(sizeStr)-2]), 16, 64)
-			if size == 0 {
-				break
-			}
-			if err != nil {
-				return err
-			}
-
-			line := make([]byte, int(size))
-			io.ReadFull(reader, line)
-			reader.Discard(2)
-			fmt.Printf("	%d bytes: %s\n", size, string(line))
-		}
-	}
-	return nil
-}
-
-func RunClient11(count int) error {
-	current := 0
-	var conn net.Conn
-	for i := 0; i < count; i++ {
-		var err error
-		// コネクションを張る
-		if conn == nil {
-			conn, err = net.Dial("tcp", "localhost:8888")
-			if err != nil {
-				return err
-			}
-			fmt.Printf("Access: %d\n", current)
-		}
-
-		// リクエストの作成、書き込み
-		request, err := http.NewRequest(
-			"GET", "http://localhost:8888", nil)
-		if err != nil {
-			return err
-		}
-		request.Header.Set("Accept-Encoding", "gzip")
-
-		err = request.Write(conn)
-		if err != nil {
-			return err
-		}
-
-		// レスポンスの受け取り
-		response, err := http.ReadResponse(
-			bufio.NewReader(conn), request)
-		if err != nil {
-			fmt.Println("Retry")
-			conn = nil
-			continue
-		}
-
-		// 結果の表示
-		dump, err := httputil.DumpResponse(response, false)
-		if err != nil {
-			return err
-		}
-		fmt.Println(string(dump))
-
-		defer response.Body.Close()
-
-		if response.Header.Get("Content-Encoding") == "gzip" {
-			reader, err := gzip.NewReader(response.Body)
-			if err != nil {
-				return err
-			}
-			io.Copy(os.Stdout, reader)
-			reader.Close()
-		} else {
-			io.Copy(os.Stdout, response.Body)
-		}
-
-		current++
 	}
 
 	if conn != nil {
@@ -184,29 +92,183 @@ func RunClient11(count int) error {
 	return nil
 }
 
-func RunClient10(count int) error {
-	for i := 0; i < count; i++ {
-		conn, err := net.Dial("tcp", "localhost:8888")
+func processChunked(conn *net.Conn, current int) error {
+	var err error
+	// コネクションを張る
+	if *conn == nil {
+		*conn, err = net.Dial("tcp", "localhost:8888")
 		if err != nil {
 			return err
 		}
-		defer conn.Close()
-		request, err := http.NewRequest(
-			"GET", "http://localhost:8888", nil)
-		if err != nil {
-			return err
-		}
-		request.Write(conn)
-		response, err := http.ReadResponse(
-			bufio.NewReader(conn), request)
-		if err != nil {
-			return err
-		}
-		dump, err := httputil.DumpResponse(response, true)
-		if err != nil {
-			return err
-		}
-		fmt.Println(string(dump))
+		fmt.Printf("Access: %d\n", current)
 	}
+	// リクエストの作成、書き込み
+	request, err := http.NewRequest("GET", "http://localhost:8888", nil)
+	if err != nil {
+		return err
+	}
+	err = request.Write(*conn)
+	if err != nil {
+		return err
+	}
+
+	// レスポンスの受け取り
+	reader := bufio.NewReader(*conn)
+	response, err := http.ReadResponse(reader, request)
+	if err != nil {
+		return err
+	}
+	dump, err := httputil.DumpResponse(response, false)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(dump))
+
+	// チャンクごとに受け取り
+	if len(response.TransferEncoding) < 1 || response.TransferEncoding[0] != "chunked" {
+		return fmt.Errorf("wrong transfer encoding")
+	}
+	for {
+		sizeStr, err := reader.ReadBytes('\n')
+		if err == io.EOF {
+			break
+		}
+		size, err := strconv.ParseInt(string(sizeStr[:len(sizeStr)-2]), 16, 64)
+		if size == 0 {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		line := make([]byte, int(size))
+		io.ReadFull(reader, line)
+		reader.Discard(2)
+		fmt.Printf("	%d bytes: %s\n", size, string(line))
+	}
+	return nil
+}
+
+func processGzip(conn *net.Conn, current int) error {
+	var err error
+	// コネクションを張る
+	if *conn == nil {
+		*conn, err = net.Dial("tcp", "localhost:8888")
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Access: %d\n", current)
+	}
+
+	// リクエストの作成、書き込み
+	request, err := http.NewRequest(
+		"GET", "http://localhost:8888", nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Accept-Encoding", "gzip")
+
+	err = request.Write(*conn)
+	if err != nil {
+		return err
+	}
+
+	// レスポンスの受け取り
+	response, err := http.ReadResponse(
+		bufio.NewReader(*conn), request)
+	if err != nil {
+		fmt.Println("Retry")
+		*conn = nil
+		return err
+	}
+
+	// 結果の表示
+	dump, err := httputil.DumpResponse(response, false)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(dump))
+
+	defer response.Body.Close()
+
+	if response.Header.Get("Content-Encoding") == "gzip" {
+		reader, err := gzip.NewReader(response.Body)
+		if err != nil {
+			return err
+		}
+		io.Copy(os.Stdout, reader)
+		reader.Close()
+	} else {
+		io.Copy(os.Stdout, response.Body)
+	}
+
+	current++
+	return nil
+}
+
+func processKeepAlive(conn *net.Conn, current int) error {
+	var err error
+	// コネクションを張る
+	if *conn == nil {
+		*conn, err = net.Dial("tcp", "localhost:8888")
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Access: %d\n", current)
+	}
+
+	// リクエストの作成、書き込み
+	request, err := http.NewRequest(
+		"GET", "http://localhost:8888", nil)
+	if err != nil {
+		return err
+	}
+	err = request.Write(*conn)
+	if err != nil {
+		return err
+	}
+
+	// レスポンスの受け取り
+	response, err := http.ReadResponse(
+		bufio.NewReader(*conn), request)
+	if err != nil {
+		fmt.Println("Retry")
+		*conn = nil
+		return err
+	}
+
+	// 結果の表示
+	dump, err := httputil.DumpResponse(response, true)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(dump))
+
+	current++
+	return nil
+}
+
+func processBasic(conn *net.Conn, current int) error {
+	connValue, err := net.Dial("tcp", "localhost:8888")
+	if err != nil {
+		return err
+	}
+	defer connValue.Close()
+	request, err := http.NewRequest(
+		"GET", "http://localhost:8888", nil)
+	if err != nil {
+		return err
+	}
+	request.Write(connValue)
+	response, err := http.ReadResponse(
+		bufio.NewReader(connValue), request)
+	if err != nil {
+		return err
+	}
+	dump, err := httputil.DumpResponse(response, true)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(dump))
 	return nil
 }
