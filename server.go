@@ -84,9 +84,10 @@ func processSession(conn net.Conn) {
 func processSessionKeepAlive(conn net.Conn) {
 	fmt.Printf("Accept %v\n", conn.RemoteAddr())
 	defer conn.Close()
+	reader := bufio.NewReader(conn)
 	for {
 		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-		request, err := http.ReadRequest(bufio.NewReader(conn))
+		request, err := http.ReadRequest(reader)
 		if err != nil {
 			neterr, ok := err.(net.Error)
 			if ok && neterr.Timeout() {
@@ -118,10 +119,11 @@ func processSessionKeepAlive(conn net.Conn) {
 func processSessionGzip(conn net.Conn) {
 	fmt.Printf("Accept %v\n", conn.RemoteAddr())
 	defer conn.Close()
+	reader := bufio.NewReader(conn)
 	for {
 		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		// リクエストを読み込む
-		request, err := http.ReadRequest(bufio.NewReader(conn))
+		request, err := http.ReadRequest(reader)
 		if err != nil {
 			neterr, ok := err.(net.Error)
 			if ok && neterr.Timeout() {
@@ -167,8 +169,9 @@ func processSessionGzip(conn net.Conn) {
 func processSessionChunk(conn net.Conn) {
 	fmt.Printf("Accept %v\n", conn.RemoteAddr())
 	defer conn.Close()
+	reader := bufio.NewReader(conn)
 	for {
-		request, err := http.ReadRequest(bufio.NewReader(conn))
+		request, err := http.ReadRequest(reader)
 		if err != nil {
 			if err == io.EOF {
 				break
