@@ -81,19 +81,15 @@ func RunHTTP11PipelineClient(count int) error {
 }
 
 func runClient(count int, handler clienthandler) error {
-	current := 0
 	session := &clientSession{}
 	for i := 0; i < count; i++ {
-		err := handler(session, current)
+		err := handler(session, i)
 		if err != nil {
 			return err
 		}
 	}
 
-	if session.conn != nil {
-		return session.conn.Close()
-	}
-	return nil
+	return closeSession(session)
 }
 
 func connect(session *clientSession, current int) error {
@@ -109,6 +105,18 @@ func connect(session *clientSession, current int) error {
 	session.reader = bufio.NewReader(conn)
 	fmt.Printf("Access: %d\n", current)
 	return nil
+}
+
+func closeSession(session *clientSession) error {
+	if session.conn == nil {
+		session.reader = nil
+		return nil
+	}
+
+	err := session.conn.Close()
+	session.conn = nil
+	session.reader = nil
+	return err
 }
 
 func processChunked(session *clientSession, current int) error {
@@ -186,7 +194,7 @@ func processGzip(session *clientSession, current int) error {
 		session.reader, request)
 	if err != nil {
 		fmt.Println("Retry")
-		session.conn = nil
+		closeSession(session)
 		return err
 	}
 
@@ -210,7 +218,6 @@ func processGzip(session *clientSession, current int) error {
 		io.Copy(os.Stdout, response.Body)
 	}
 
-	current++
 	return nil
 }
 
@@ -236,7 +243,7 @@ func processKeepAlive(session *clientSession, current int) error {
 		session.reader, request)
 	if err != nil {
 		fmt.Println("Retry")
-		session.conn = nil
+		closeSession(session)
 		return err
 	}
 
@@ -247,7 +254,6 @@ func processKeepAlive(session *clientSession, current int) error {
 	}
 	fmt.Println(string(dump))
 
-	current++
 	return nil
 }
 
