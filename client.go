@@ -12,7 +12,11 @@ import (
 	"strconv"
 )
 
-type clienthandler func(*net.Conn, int) error
+type clientSession struct {
+	conn   net.Conn
+	reader *bufio.Reader
+}
+type clienthandler func(*clientSession, int) error
 
 func RunHTTP10BasicClient(count int) error {
 	return runClient(count, processBasic)
@@ -78,43 +82,52 @@ func RunHTTP11PipelineClient(count int) error {
 
 func runClient(count int, handler clienthandler) error {
 	current := 0
-	var conn net.Conn
+	session := &clientSession{}
 	for i := 0; i < count; i++ {
-		err := handler(&conn, current)
+		err := handler(session, current)
 		if err != nil {
 			return err
 		}
 	}
 
-	if conn != nil {
-		return conn.Close()
+	if session.conn != nil {
+		return session.conn.Close()
 	}
 	return nil
 }
 
-func processChunked(conn *net.Conn, current int) error {
-	var err error
+func connect(session *clientSession, current int) error {
+	if session.conn != nil {
+		return nil
+	}
+
+	conn, err := net.Dial("tcp", "localhost:8888")
+	if err != nil {
+		return err
+	}
+	session.conn = conn
+	session.reader = bufio.NewReader(conn)
+	fmt.Printf("Access: %d\n", current)
+	return nil
+}
+
+func processChunked(session *clientSession, current int) error {
 	// コネクションを張る
-	if *conn == nil {
-		*conn, err = net.Dial("tcp", "localhost:8888")
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Access: %d\n", current)
+	if err := connect(session, current); err != nil {
+		return err
 	}
 	// リクエストの作成、書き込み
 	request, err := http.NewRequest("GET", "http://localhost:8888", nil)
 	if err != nil {
 		return err
 	}
-	err = request.Write(*conn)
+	err = request.Write(session.conn)
 	if err != nil {
 		return err
 	}
 
 	// レスポンスの受け取り
-	reader := bufio.NewReader(*conn)
-	response, err := http.ReadResponse(reader, request)
+	response, err := http.ReadResponse(session.reader, request)
 	if err != nil {
 		return err
 	}
@@ -129,7 +142,7 @@ func processChunked(conn *net.Conn, current int) error {
 		return fmt.Errorf("wrong transfer encoding")
 	}
 	for {
-		sizeStr, err := reader.ReadBytes('\n')
+		sizeStr, err := session.reader.ReadBytes('\n')
 		if err == io.EOF {
 			break
 		}
@@ -142,22 +155,17 @@ func processChunked(conn *net.Conn, current int) error {
 		}
 
 		line := make([]byte, int(size))
-		io.ReadFull(reader, line)
-		reader.Discard(2)
+		io.ReadFull(session.reader, line)
+		session.reader.Discard(2)
 		fmt.Printf("	%d bytes: %s\n", size, string(line))
 	}
 	return nil
 }
 
-func processGzip(conn *net.Conn, current int) error {
-	var err error
+func processGzip(session *clientSession, current int) error {
 	// コネクションを張る
-	if *conn == nil {
-		*conn, err = net.Dial("tcp", "localhost:8888")
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Access: %d\n", current)
+	if err := connect(session, current); err != nil {
+		return err
 	}
 
 	// リクエストの作成、書き込み
@@ -168,17 +176,17 @@ func processGzip(conn *net.Conn, current int) error {
 	}
 	request.Header.Set("Accept-Encoding", "gzip")
 
-	err = request.Write(*conn)
+	err = request.Write(session.conn)
 	if err != nil {
 		return err
 	}
 
 	// レスポンスの受け取り
 	response, err := http.ReadResponse(
-		bufio.NewReader(*conn), request)
+		session.reader, request)
 	if err != nil {
 		fmt.Println("Retry")
-		*conn = nil
+		session.conn = nil
 		return err
 	}
 
@@ -206,15 +214,10 @@ func processGzip(conn *net.Conn, current int) error {
 	return nil
 }
 
-func processKeepAlive(conn *net.Conn, current int) error {
-	var err error
+func processKeepAlive(session *clientSession, current int) error {
 	// コネクションを張る
-	if *conn == nil {
-		*conn, err = net.Dial("tcp", "localhost:8888")
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Access: %d\n", current)
+	if err := connect(session, current); err != nil {
+		return err
 	}
 
 	// リクエストの作成、書き込み
@@ -223,17 +226,17 @@ func processKeepAlive(conn *net.Conn, current int) error {
 	if err != nil {
 		return err
 	}
-	err = request.Write(*conn)
+	err = request.Write(session.conn)
 	if err != nil {
 		return err
 	}
 
 	// レスポンスの受け取り
 	response, err := http.ReadResponse(
-		bufio.NewReader(*conn), request)
+		session.reader, request)
 	if err != nil {
 		fmt.Println("Retry")
-		*conn = nil
+		session.conn = nil
 		return err
 	}
 
@@ -248,7 +251,7 @@ func processKeepAlive(conn *net.Conn, current int) error {
 	return nil
 }
 
-func processBasic(conn *net.Conn, current int) error {
+func processBasic(session *clientSession, current int) error {
 	connValue, err := net.Dial("tcp", "localhost:8888")
 	if err != nil {
 		return err
