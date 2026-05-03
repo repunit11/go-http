@@ -48,14 +48,14 @@ func RunHTTP11PipelineClient(count int) error {
 	for i := 0; i < count; i++ {
 		lastMessage := i == count-1
 		request, err := http.NewRequest(
-			"GET", "http://localhost:8888?message="+strconv.Itoa(count), nil)
+			"GET", "http://localhost:8888?message="+strconv.Itoa(i), nil)
+		if err != nil {
+			return err
+		}
 		if lastMessage {
 			request.Header.Add("Connection", "close")
 		} else {
 			request.Header.Add("Connection", "keep-alive")
-		}
-		if err != nil {
-			return err
 		}
 		err = request.Write(conn)
 		if err != nil {
@@ -67,6 +67,8 @@ func RunHTTP11PipelineClient(count int) error {
 
 	reader := bufio.NewReader(conn)
 	for _, request := range requests {
+		// pipeline の学習ポイントとして、この順序付き受信は維持したい。
+		// request を送った順に response を対応付けて読む。
 		response, err := http.ReadResponse(reader, request)
 		if err != nil {
 			return err
